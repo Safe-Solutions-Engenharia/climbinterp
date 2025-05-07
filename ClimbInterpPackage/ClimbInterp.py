@@ -13,23 +13,6 @@ utilizada como um módulo, sendo chamado em outros .py. (INCOMPLETA)
 
 warnings.filterwarnings("ignore")
 
-
-def exp(x, a, b):
-    return a * np.exp(b*x)
-
-def logarithmic(x, a, b):
-    return a * np.log(x) + b
-
-def linear(x, a, b):
-    return a * x + b
-
-def linear_with_c_zero(x, a):
-    return a * x
-
-def exception_linear(x, a):
-    return x * a
-
-
 # Metade inicial > exponencial
 # metade final > log ou linear
 
@@ -84,13 +67,61 @@ class ClimbInterp:
         sorted_x, sorted_y = zip(*sorted_points)
         return sorted_x, sorted_y
 
+    @staticmethod
+    def _linear_fit(x, y):
+        m = cp.Variable()
+        c = cp.Variable()
+
+        constraints = [y[i] <= m * x[i] + c for i in range(len(x))]
+        mean_y = sum(y) / len(y)
+        tss = cp.sum_squares(y - mean_y)
+        rss = cp.sum_squares(y - (m * x + c))
+        r_squared = 1 - rss / tss
+        objective = cp.Maximize(r_squared)
+        problem = cp.Problem(objective, constraints)
+        try:
+            problem.solve()
+        except:
+            return None, None, None
+
+        if not r_squared.value:
+            r_squared_lin = None
+        else:
+            r_squared_lin = r_squared.value
+
+        return m.value, c.value, r_squared_lin
+
+    @staticmethod
+    def _logarithmic_fit(x, y):
+        m = cp.Variable()
+        c = cp.Variable()
+
+        constraints = [y[i] <= m * cp.log(x[i]) + c for i in range(len(x))]
+        mean_y = sum(y) / len(y)
+        tss = cp.sum_squares(y - mean_y)
+        rss = cp.sum_squares(y - (m * cp.log(np.array(x)) + c))
+        r_squared = 1 - rss / tss
+        objective = cp.Maximize(r_squared)
+        problem = cp.Problem(objective, constraints)
+        try:
+            problem.solve()
+        except:
+            return None, None, None
+
+        if not r_squared.value:
+            r_squared_log = None
+        else:
+            r_squared_log = r_squared.value
+
+        return m.value, c.value, r_squared_log
+
     def arrange_points(self):
         x_points, y_points = self._sort_points_by_x(self.x_value, self.y_value)
 
         x = [x_points[0]]
         y = [y_points[0]]
         for i in range(1, len(y_points)):
-            if y[-1] > y_points[i]:
+            if y[i-1] > y_points[i]:    # Filter points with y-values ​​lower than the previous point
                 pass
             else:
                 x.append(x_points[i])
@@ -101,13 +132,13 @@ class ClimbInterp:
             if value not in result_dict:
                 result_dict[value] = y[idx]
             else:
-                result_dict[value] = max(result_dict[value], y[idx])
+                result_dict[value] = max(result_dict[value], y[idx])    # If an x-value is repeated, it gets the highest y-value
 
         self.x_value = list(result_dict.keys())
         self.y_value = list(result_dict.values())
 
     def _get_lower_error(self, x, y):
-        if len(x) == 1:
+        if len(x) == 1: # If there is only one point available, it creates a linear function that cuts the origin (0, 0).
             popt, pcov = optimize.curve_fit(self._exception_linear, [0, x[0]], [0, y[0]])
             return x, y, popt, True
 
@@ -173,54 +204,6 @@ class ClimbInterp:
 
         self.popt_exp = popt
         self.is_linear = is_linear
-
-    @staticmethod
-    def _linear_fit(x, y):
-        m = cp.Variable()
-        c = cp.Variable()
-
-        constraints = [y[i] <= m * x[i] + c for i in range(len(x))]
-        mean_y = sum(y) / len(y)
-        tss = cp.sum_squares(y - mean_y)
-        rss = cp.sum_squares(y - (m * x + c))
-        r_squared = 1 - rss / tss
-        objective = cp.Maximize(r_squared)
-        problem = cp.Problem(objective, constraints)
-        try:
-            problem.solve()
-        except:
-            return None, None, None
-
-        if not r_squared.value:
-            r_squared_lin = None
-        else:
-            r_squared_lin = r_squared.value
-
-        return m.value, c.value, r_squared_lin
-
-    @staticmethod
-    def _logarithmic_fit(x, y):
-        m = cp.Variable()
-        c = cp.Variable()
-
-        constraints = [y[i] <= m * cp.log(x[i]) + c for i in range(len(x))]
-        mean_y = sum(y) / len(y)
-        tss = cp.sum_squares(y - mean_y)
-        rss = cp.sum_squares(y - (m * cp.log(np.array(x)) + c))
-        r_squared = 1 - rss / tss
-        objective = cp.Maximize(r_squared)
-        problem = cp.Problem(objective, constraints)
-        try:
-            problem.solve()
-        except:
-            return None, None, None
-
-        if not r_squared.value:
-            r_squared_log = None
-        else:
-            r_squared_log = r_squared.value
-
-        return m.value, c.value, r_squared_log
 
     def curve_fit_linear(self):
 
